@@ -100,11 +100,35 @@ typedef SecBlock<byte, AllocatorWithCleanup<byte, false> > SecByteBlock;
 
 ### CBC & CTR
 
+1. PRG
+
+   并非secure PRG，只是用来生成随机值，例如CBC，CTR中的随机IV。
+
+   头文件`"osrng.h"`，
+
+   ```c++
+   AutoSeededRandomPool prng;
+   // SecByteBlock iv
+   prng.GenerateBlock(iv, iv.size());
+   ```
+
+2. AES使用
+
+   头文件`"modes.h"`，加密算法如下（解密完全一样），只需`SetKey`完成初始化就可以调用`ProcessBlock`执行AES加密/解密算法：
+
+   ```c++
+   AESEncryption aes_encryptor_;
+   // SecByteBlock key
+   aes_encryptor_.SetKey(key, key.size());
+   // SecByteBlock in, out
+   aes_encryptor_.ProcessBlock(in, out);
+   ```
+
 1. CBC注意PKCS padding的处理（分为正反向，即加密和解密）
 
 2. CTR注意如何实现IV字节流+1
 
-   直接使用Crypto++提供的库函数`IncrementCounterByOne`
+   直接使用Crypto++提供的库函数`IncrementCounterByOne`（头文件"`cryplib.h"`，几乎不用显式引入因为绝大部分头文件已经引用了它）
 
    ```c++
    // increment IV by one
