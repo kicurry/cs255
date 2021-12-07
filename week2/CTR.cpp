@@ -88,16 +88,11 @@ void CTR::D(string cipher_text_str)
     decoder.Put((byte *)cipher_text_str.data(), cipher_text_str.size());
     decoder.MessageEnd();
 
-    // set last data block true size
-    size_t last_size = decoded.size() % AES::BLOCKSIZE;
-    if (last_size == 0)
-    {
-        last_size = AES::BLOCKSIZE;
-    }
     // transform bytes to data blocks
     for (size_t i = 0; i < decoded.size(); i += AES::BLOCKSIZE)
     {
-        auto msg_block = new SecByteBlock(reinterpret_cast<const byte *>(&decoded[i]), AES::BLOCKSIZE);
+        size_t length = i + AES::BLOCKSIZE < decoded.size() ? AES::BLOCKSIZE : decoded.size() - i;
+        auto msg_block = new SecByteBlock(reinterpret_cast<const byte *>(&decoded[i]), length);
         blks.push_back(msg_block);
     }
 
@@ -121,11 +116,8 @@ void CTR::D(string cipher_text_str)
         ArraySource(blks[i]->data(), blks[i]->size(), true, new ArrayXorSink(out_register, out_register.size()));
 
         // print
-        size_t length = out_register.size();
-        if (i + 1 == blks.size())
-        {
-            length = last_size;
-        }
+        size_t length = blks[i]->size();    
+        // right size is not the size of out_register but current blk!!
         for (size_t j = 0; j < length; j++)
         {
             cout << out_register[j];
