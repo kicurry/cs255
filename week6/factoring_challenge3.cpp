@@ -1,3 +1,4 @@
+// See "notes.pdf" for more details about solution
 #include <iostream>
 #include <gmpxx.h>
 

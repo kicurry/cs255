@@ -5,7 +5,7 @@ BINARY = ./bin
 
 # compile options
 CXX = g++
-CFLAG = -I$(INCLUDE)
+CFLAGS = $(INCLUDE)
 INCLUDE = 
 LIBS = -lgmpxx -lgmp
 
