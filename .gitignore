@@ -4,5 +4,8 @@
 # binary file
 bin/
 
+# nodejs
+node_modules
+
 # gmp
 gmp-*

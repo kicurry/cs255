@@ -8,6 +8,9 @@ var lib = require("./lib");
 var KDF = lib.KDF,
     HMAC = lib.HMAC,
     SHA256 = lib.SHA256,
+    /**
+     * See more details in http://bitwiseshiftleft.github.io/sjcl/doc/sjcl.hash.sha256.html 
+     * SHA256: string|bitArray -> bitArray */
     setupCipher = lib.setupCipher,
     encryptwithGCM = lib.encryptwithGCM,
     decryptWithGCM = lib.decryptWithGCM,
@@ -56,6 +59,28 @@ var keychainClass = function() {
     */
   keychain.init = function(password) {
     priv.data.version = "CS 255 Password Manager v1.0";
+    
+    priv.kvs = {};
+
+    /* Key derived from password by using PBKDF2 */
+    var/* bitArray */ salt = randomBitarray(64); // recommended length is 64 bits
+    priv.data.salt = salt;
+    
+    var/* bitArray */ key = KDF(password, salt);
+    priv.secrets.key = key;
+
+    /* Secret Key for HAMCing KVS-key(i.e. domain) */
+    var/* bitArray */ rk = randomBitarray(128);
+    priv.secrets.kk = HMAC(key, rk);
+
+    /**
+     * Secret Key for AES-GCM encrypting KVS-value(i.e. password for 
+     * corresponsing domain) */
+    var/* bitArray */ rv = randomBitarray(128); // AES-128
+    priv.secrets.kv = bitarraySlice(HMAC(key, rv), 0, 128);
+
+    /* Set the state of password manager */
+    ready = true;
   };
 
   /**
@@ -76,7 +101,29 @@ var keychainClass = function() {
     * Return Type: boolean
     */
   keychain.load = function(password, repr, trustedDataCheck) {
-      throw "Not implemented!";
+      // throw "Not implemented!";
+      if (trustedDataCheck !== undefined) {
+        // check integerity
+        var now = SHA256(stringToBitarray(repr)),
+            prev = trustedDataCheck;
+        if (!bitarrayEqual(now, prev)) {
+          ready = false;
+          throw "Tampering is detected.";
+        }
+      }
+
+      priv = JSON.parse(repr);
+      
+      // check master-password
+      var trueKey = priv.secrets.key,
+          salt = priv.data.salt;
+      var key = KDF(password, salt);
+      if (!bitarrayEqual(trueKey, key)) {
+        ready = false;
+        return false;
+      }
+
+      return true;
   };
 
   /**
@@ -93,7 +140,14 @@ var keychainClass = function() {
     * Return Type: array
     */ 
   keychain.dump = function() {
-      throw "Not implemented!";
+      // throw "Not implemented!";
+      if (ready !== true) {
+        return null;
+      }
+      
+      var/* string */ json = JSON.stringify(priv);
+      var/* bitArray */ checksum = SHA256(stringToBitarray(json));
+      return [json, checksum];
   };
 
   /**
@@ -107,7 +161,19 @@ var keychainClass = function() {
     * Return Type: string
     */
   keychain.get = function(name) {
-      throw "Not implemented!";
+      // throw "Not implemented!";
+      if (ready !== true) {
+        throw "Keychain not initialized.";
+      }
+
+      var res = null;
+      var key = HMAC(priv.secrets.kk, name);
+      if (objectHasKey(priv.kvs, key)) {
+        var cipher = setupCipher(priv.secrets.kv);
+        var ciphertext = priv.kvs[key];
+        res = paddedBitarrayToString(decryptWithGCM(cipher, ciphertext), MAX_PW_LEN_BYTES);
+      }
+      return res;
   };
 
   /** 
@@ -122,8 +188,20 @@ var keychainClass = function() {
   * Return Type: void
   */
   keychain.set = function(name, value) {
-      throw "Not implemented!";
-  };
+      // throw "Not implemented!";
+      if (ready !== true) {
+        throw "Keychain not initialized.";
+      }
+      
+      // 1. compute KVS-key
+      var key = HMAC(priv.secrets.kk, name);
+      // 2. compute KVS-value
+      var cipher = setupCipher(priv.secrets.kv);
+      var plaintext = stringToPaddedBitarray(value, MAX_PW_LEN_BYTES); // padding
+      var ciphertext = encryptwithGCM(cipher, plaintext);
+      // 3. insert or update KVS
+      priv.kvs[key] = ciphertext;
+    };
 
   /**
     * Removes the record with name from the password manager. Returns true
@@ -135,7 +213,20 @@ var keychainClass = function() {
     * Return Type: boolean
   */
   keychain.remove = function(name) {
-      throw "Not implemented!";
+      // throw "Not implemented!";
+      if (ready !== true) {
+        throw "Keychain not initialized.";
+      }
+
+      // 1. compute KVS-key
+      var key = HMAC(priv.secrets.kk, name);
+      // 2. remove
+      if (objectHasKey(priv.kvs, key)) {
+        delete priv.kvs[key];
+        return true;
+      }
+
+      return false;
   };
 
   return keychain;
