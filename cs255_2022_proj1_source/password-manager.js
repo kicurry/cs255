@@ -23,6 +23,67 @@ function arrayEqual(a1, a2) {
   return true;
 }
 
+function wordToBytesAcc(word, bytes) {
+  // word is a nonnegative integer, at most 2^31-1
+  if (word < 0) {
+    throw "wordToBytesAcc: can't convert negative integer";
+  }
+  for (let i = 0; i < 4; i++) {
+    bytes.push(word & 0xff);
+    word = word >>> 8;
+  }
+};
+
+function wordFromBytesSub(bytes, i_start) {
+  if (!Array.isArray(bytes)) {
+    console.log(bytes);
+    console.trace();
+    throw "wordFromBytesSub: received non-array";
+  }
+  if (bytes.length < 4) {
+    throw "wordFromBytesSub: array too short";
+  }
+  var word = 0;
+  for (let i = i_start + 3; i >= i_start; i--) {
+    word <<= 8;
+    word |= bytes[i];
+  }
+  return word;
+};
+
+function rawToPaddedByteArray(arr, paddedLen) {
+  let l = arr.length;
+  if (l > paddedLen) {
+    throw "to_padded_byte_array: array too long";
+  }
+  var bytes = [];
+  wordToBytesAcc(l, bytes);
+  for (let i = 0; i < paddedLen; i++) {
+    // Note: in general, this kind of code may be vulnerable to timing attacks
+    // (not considered in our threat model).  For our use case, these attacks
+    // do not seem relevant (nor is it clear how one could mitigate them, since
+    // the user will eventually manipulate passwords in memory in the clear).
+    if (i < l) {
+      bytes.push(arr[i]);
+    } else {
+      bytes.push(0);
+    }
+  }
+  return bytes;
+};
+
+function paddedByteArrayToRaw(a, paddedLen) {
+  if (a.length != paddedLen + 4) {
+    throw "paddedByteArrayToRaw: wrong length";
+  }
+  let l = wordFromBytesSub(a, 0);
+  let res = [];
+  for (var i = 4; i < Math.min(4 + l, a.length); i++) {
+    res.push(a[i]);
+  }
+  return res;
+};
+
 class Keychain {
   /**
    * Initializes the keychain using the provided information. Note that external
@@ -312,7 +373,13 @@ class Keychain {
         this.secrets.AESKey,
         ciphertext
       );
-      res = byteArrayToString(res);
+      res = byteArrayToString(
+        untypedToTypedArray(
+          paddedByteArrayToRaw(
+            bufferToUntypedArray(res), Keychain.MAX_PW_LEN_BYTES
+          )
+        )
+      );
     }
     return res;
   };
@@ -338,7 +405,7 @@ class Keychain {
     let key = await subtle.sign(
       "HMAC",
       this.secrets.HMACKey,
-      stringToByteArray(name)
+      name
     );
     key = bufferToUntypedArray(key);
     // 2. compute KVS-value
@@ -349,10 +416,10 @@ class Keychain {
         iv: stringToByteArray(iv)
       },
       this.secrets.AESKey,
-      value
+      untypedToTypedArray(rawToPaddedByteArray(stringToByteArray(value), Keychain.MAX_PW_LEN_BYTES))
     );
     // 3. insert or update KVS
-    this.secrets.kvs[(key)] = [iv, bufferToUntypedArray(ciphertext)];
+    this.secrets.kvs[key] = [iv, bufferToUntypedArray(ciphertext)];
   };
 
   /**
@@ -388,6 +455,8 @@ class Keychain {
   };
 
   static get PBKDF2_ITERATIONS() { return 100000; }
+
+  static get MAX_PW_LEN_BYTES() { return 64; }
 };
 
 module.exports = {
