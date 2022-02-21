@@ -38,7 +38,8 @@ int main()
     //
     // Test unsigned long long
     //
-    std::cout << "Test ULL to mpz_class:" << std::endl;
+    std::cout << std::endl
+              << "Test ULL to mpz_class:" << std::endl;
     mpz_class x, y;
 
     // error: no overload for ULL(unsigned long long)
@@ -64,6 +65,25 @@ int main()
     // order: mostly modern PC is little endian, so 'order' is -1;
     // endian: 0 for the native endianness of the host CPU;
     // nail: The most significant nails bits of each word are unused and set to zero, this can be 0 to produce full words.
+
+    //
+    // check 8^64 mod 0xFFFFFFFF00000001 = 1
+    //
+    std::cout << std::endl
+              << "Check 8^64 mod 0xFFFFFFFF00000001 = 1" << std::endl;
+    mpz_class g, N, m, res;
+
+    g = 8;
+    N = 64;
+    ULL _m = 0xFFFFFFFF00000001ULL;
+    ss << _m;
+    ss >> m;
+    ss.clear();
+    std::cout << "m = " << m << std::endl;
+
+    mpz_powm(res.get_mpz_t(), g.get_mpz_t(), N.get_mpz_t(), m.get_mpz_t());
+
+    std::cout << "8^64 = " << res << std::endl;
 
     return 0;
 }
